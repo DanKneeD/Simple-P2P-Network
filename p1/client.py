@@ -1,34 +1,48 @@
 import socket
 
-server_port = 5001
-ip_address = 'localhost'
-
 peers = {}
 
 def read_peer_settings():
 
-    #open file and read first line
-    file = open('../peer_settings.txt', 'r')
-    current_line = file.readline()
-    counter = 0
+  
+    try:
 
-    while current_line.strip() != '':
+        with open('../peer_settings.txt', 'r') as file:
 
-        # split currnet line by spaces 
-        peer_ID, ip_addr, server_port = current_line.strip().split(" ")
-        print(f"Peer ID: {peer_ID}, IP Address: {ip_addr}, Server Port: {server_port} \n" )
+            current_line = file.readline().strip()
 
-        # add peer settings to peers list
-        peers[counter] = (peer_ID, ip_addr, int(server_port))
-        counter += 1
+            while current_line != '':
 
-        # read next line
-        current_line = file.readline()
+                # split currnet line by spaces 
+                peer_ID, ip_addr, server_port = current_line.split(" ")
+
+                # add peer settings to peers list
+                peers[peer_ID] = (ip_addr, int(server_port) )
+                print("ran")
+                # read next line
+                current_line = file.readline().strip()
+
+    except IOError:
+        print("File not found.")
+    except Exception:
+        print("Unexpected error occurred while reading the file.")
 
 
+
+def connect_to_peers():
+    for peer_ID, (ip_addr, server_port) in peers.items():
+        try:
+            client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            client_socket.connect((ip_addr, server_port))
+            print(f"Connected to peer {peer_ID} at {ip_addr}:{server_port}")
+        except socket.error as e:
+            print(f"Failed to connect to peer {peer_ID} at {ip_addr}:{server_port}. Error: {str(e)}")
+            client_socket.close()
 
 
 read_peer_settings()
+connect_to_peers()
+
 print(peers)
 
 
