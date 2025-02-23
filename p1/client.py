@@ -1,7 +1,9 @@
 import socket
 import threading
 
-peers = {}
+#ip_address, server_port, thread
+peers_dict = {}
+
 
 def read_peer_settings():
     try:
@@ -13,56 +15,97 @@ def read_peer_settings():
             while current_line != '':
 
                 # split currnet line by spaces 
-                peer_ID, ip_addr, server_port = current_line.split(" ")
+                peer_id, ip_addr, server_port = current_line.split(" ")
 
                 # add peer settings to peers list
-                peers[peer_ID] = (ip_addr, int(server_port), False )
+                peers_dict[peer_id] = (ip_addr, int(server_port), None)
                 # read next line
                 current_line = file.readline().strip()
 
     except IOError:
         print("File not found.")
-    except Exception:
-        print("Unexpected error occurred while reading the file.")
+    except Exception as e:
+        print(f"Unexpected error occurred while reading the file.{e}")
 
 
-def thread_connected_cleint(cleint):
-    while True:
-        try:
-            pass
-        except Exception as e:
-            print("Error reading from client:", str(e))
-            cleint.close()
-            break
+# def thread_connected_cleint(cleint):
+
+
+#     while True:
+#         try:
+#             message = cleint.recv(1024)
+
+#             print(message)
+#             pass
+#         except Exception as e:
+#             print("Error reading from client:", str(e))
+#             cleint.close()
+#             break
    
 
 
-def connect_to_peer(peer):
-    if peer in peers:
-        ip_addr, server_port, isConnected = peers[peer]
+#creating socket and thread connection
+def connect_to_peer(peer_id):
 
-        if isConnected == False :
+    # check if peer ID exists
+    if peer_id in peers_dict:
+
+        ip_addr, server_port, thread = peers_dict[peer_id]
+
+        #create thread if does not exist
+        if thread == None :
             try:
+                #create socket connection
                 client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 client_socket.connect((ip_addr, server_port))
-                print(f"Connected to peer {peer} at {ip_addr}:{server_port} \n")
-                t = threading.Thread(target=thread_connected_cleint, args=(client_socket,))
-                t.start()
-                peers[peer] = (ip_addr, server_port, True) #change to is connected
+
+                print(f"Connected to peer {peer_id} at {ip_addr}:{server_port} \n")
+
+                #create thread
+                thread = PeerThread(peer_id, client_socket)
+                # t = threading.Thread(target=con, args=(client_socket,))
+                thread.start()
+
+
+                peers_dict[peer_id] = (ip_addr, server_port, thread) #change to is connected
 
             except socket.error as e:
-                print(f"Failed to connect to peer {peer} at {ip_addr}:{server_port}. Error: {str(e)} \n")
+                print(f"Failed to connect to peer {peer_id} at {ip_addr}:{server_port}. Error: {str(e)} \n")
                 client_socket.close()
-        else:
-            print(f"Already connected to peer {peer} at {ip_addr}:{server_port} \n")
-    else:
-        print(f"Peer {peer} does not exist")
 
+    else:
+       print(f"Peer {peer_id} does not exist")
+
+
+class PeerThread(threading.Thread):
+    def __init__(self, peer_id, client_socket):
+        threading.Thread.__init__(self)
+        self.peer_id = peer_id
+        self.client_socket = client_socket
+        print("Thread started")
+
+    def filelist(self):
+        print(f"file list for peer {self.peer_id}")
+        pass
+
+    def upload(self, filename):
+        print(f"uploading {filename} to peer {self.peer_id}")
+        pass
+
+    def download(self, filename):
+        print(f"downloading {filename} from peer {self.peer_id}")
+        pass
+
+
+
+
+
+#TCP connection to server peer_id failed
 def main():
     read_peer_settings()
     while True:
 
-        user_input = input("\n Input your command for {peer_ID}: ")
+        user_input = input("\n Input your command: ")
         try:
             command, parameters = user_input.split(" ", 1)
 
@@ -70,17 +113,22 @@ def main():
                 print("Invalid command. Supported commands are: #FILELIST, #UPLOAD, #DOWNLOAD")
 
             elif command == "#FILELIST":
-                peers = parameters.split(" ")
-                print(peers)
-                for peer in peers:
-                    connect_to_peer(peer)
+                peer_ids = parameters.split(" ")
+                print(peer_ids)
+
+                # multithreading the peers
+                for peer_id in peer_ids:
+                    connect_to_peer(peer_id)
+                    ip_addr, server_port, thread = peers_dict[peer_id]
+                    thread.filelist()
+
 
             elif command == "#UPLOAD":
-                filename, peers = parameters.split(" ", 1)
+                filename, inputed_peers = parameters.split(" ", 1)
                 pass
 
             elif command == "#DOWNLOAD":
-                filename, peers = parameters.split(" ", 1)
+                filename, inputed_peers = parameters.split(" ", 1)
 
                 pass
 
@@ -96,7 +144,7 @@ def main():
 
 if __name__ == "__main__":
     main()
-print(peers)
+print(peers_dict)
 
 
 
