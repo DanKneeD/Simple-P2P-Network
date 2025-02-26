@@ -28,21 +28,6 @@ def read_peer_settings():
         print(f"Unexpected error occurred while reading the file.{e}")
 
 
-# def thread_connected_cleint(cleint):
-
-
-#     while True:
-#         try:
-#             message = cleint.recv(1024)
-
-#             print(message)
-#             pass
-#         except Exception as e:
-#             print("Error reading from client:", str(e))
-#             cleint.close()
-#             break
-   
-
 
 #creating socket and thread connection
 def connect_to_peer(peer_id):
@@ -59,7 +44,7 @@ def connect_to_peer(peer_id):
                 client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 client_socket.connect((ip_addr, server_port))
 
-                print(f"Connected to peer {peer_id} at {ip_addr}:{server_port} \n")
+                print(f"200 Connected to peer {peer_id} at {ip_addr}:{server_port} \n")
 
                 #create thread
                 thread = PeerThread(peer_id, client_socket)
@@ -70,7 +55,7 @@ def connect_to_peer(peer_id):
                 peers_dict[peer_id] = (ip_addr, server_port, thread) #change to is connected
 
             except socket.error as e:
-                print(f"Failed to connect to peer {peer_id} at {ip_addr}:{server_port}. Error: {str(e)} \n")
+                print(f"250 Failed to connect to peer {peer_id} at {ip_addr}:{server_port}. Error: {str(e)} \n")
                 client_socket.close()
 
     else:
@@ -85,7 +70,15 @@ class PeerThread(threading.Thread):
         print("Thread started")
 
     def filelist(self):
-        print(f"file list for peer {self.peer_id}")
+        print(f"Client({self.peer_id}): #FILELIST")
+
+        # send filelist request to peer server
+        self.client_socket.send("#FILELIST".encode())
+
+        response = self.client_socket.recv(1024)
+        
+        print(f"Server {self.peer_id}: 200 Files served: {response.decode()}")
+
         pass
 
     def upload(self, filename):
@@ -100,9 +93,12 @@ class PeerThread(threading.Thread):
 
 
 
-#TCP connection to server peer_id failed
+
 def main():
+
+    # get peers 
     read_peer_settings()
+
     while True:
 
         user_input = input("\n Input your command: ")
@@ -114,7 +110,7 @@ def main():
 
             elif command == "#FILELIST":
                 peer_ids = parameters.split(" ")
-                print(peer_ids)
+                print("temp, peers entered:", peer_ids)
 
                 # multithreading the peers
                 for peer_id in peer_ids:
@@ -144,10 +140,6 @@ def main():
 
 if __name__ == "__main__":
     main()
-print(peers_dict)
 
+print("temp peers dirc:", peers_dict)
 
-
-# server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-# server.bind(('localhost', 8232))
-# server.connect((ip_address, server_port))
