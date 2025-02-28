@@ -1,5 +1,6 @@
 import socket
 import threading
+import os
 
 #ip_address, server_port, thread
 peers_dict = {}
@@ -44,7 +45,7 @@ def connect_to_peer(peer_id):
                 client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 client_socket.connect((ip_addr, server_port))
 
-                print(f"200 Connected to peer {peer_id} at {ip_addr}:{server_port} \n")
+                # print(f"200 Connected to peer {peer_id} at {ip_addr}:{server_port} \n")
 
                 #create thread
                 thread = PeerThread(peer_id, client_socket)
@@ -53,13 +54,20 @@ def connect_to_peer(peer_id):
 
 
                 peers_dict[peer_id] = (ip_addr, server_port, thread) #change to is connected
+                return True
+
 
             except socket.error as e:
-                print(f"250 Failed to connect to peer {peer_id} at {ip_addr}:{server_port}. Error: {str(e)} \n")
+                print(f"Client({peer_id}): 250 TCP connection to server {peer_id} failed")
                 client_socket.close()
+                return False
+            
+        else:
+            return True
 
     else:
-       print(f"Peer {peer_id} does not exist")
+       print(f"Client({peer_id}): 250 Peer does not exist")
+       return False
 
 
 class PeerThread(threading.Thread):
@@ -67,7 +75,6 @@ class PeerThread(threading.Thread):
         threading.Thread.__init__(self)
         self.peer_id = peer_id
         self.client_socket = client_socket
-        print("Thread started")
 
     def filelist(self):
         print(f"Client({self.peer_id}): #FILELIST")
@@ -77,12 +84,54 @@ class PeerThread(threading.Thread):
 
         response = self.client_socket.recv(1024)
         
-        print(f"Server {self.peer_id}: 200 Files served: {response.decode()}")
+        print(response.decode())
 
         pass
 
     def upload(self, filename):
-        print(f"uploading {filename} to peer {self.peer_id}")
+
+        files = os.listdir("./served_files")
+
+        if filename in files:
+
+            #get size and file
+            file_size = os.path.getsize(f"./served_files/{filename}")
+            file = open(f"./served_files/{filename}", "rb")
+
+
+            # send upload request
+            request = f"#UPLOAD {filename} bytes {file_size}"
+            self.client_socket.send(request.encode())
+            print(f"Client({self.peer_id}): {request}")
+
+            #get reply
+            reply = self.client_socket.recv(1024).decode()
+            print(reply)
+            parts = reply.split(" ")
+            status_code = int(parts[2])
+            print(status_code)
+            
+
+            if status_code == 330:
+                chunk_num = 0
+
+                while True:
+                    chunk = file.read(100) #read 100 bytes
+                  
+                    if not chunk:
+                        break
+                        
+                    chunk_num += 1
+
+                    request = f"#UPLOAD {filename} chunk {chunk_num} {chunk}"
+                    print(f"Client({self.peer_id}): {request}")
+
+                    reply = self.client_socket.recv(1024).decode()
+
+                    print("\n")
+
+            
+        
         pass
 
     def download(self, filename):
@@ -101,26 +150,41 @@ def main():
 
     while True:
 
-        user_input = input("\n Input your command: ")
+        user_input = input("\nInput your command: ")
         try:
             command, parameters = user_input.split(" ", 1)
 
-            if command not in ["#FILELIST", "#UPLOAD", "#DOWNLOAD"]:
+            if command not in ["#FILELIST", "#UPLOAD", "#DOWNLOAD", "u"]:
                 print("Invalid command. Supported commands are: #FILELIST, #UPLOAD, #DOWNLOAD")
 
             elif command == "#FILELIST":
-                peer_ids = parameters.split(" ")
-                print("temp, peers entered:", peer_ids)
+                inputed_peers = parameters.split(" ")
 
                 # multithreading the peers
-                for peer_id in peer_ids:
-                    connect_to_peer(peer_id)
-                    ip_addr, server_port, thread = peers_dict[peer_id]
-                    thread.filelist()
+                for peer_id in inputed_peers:
+                    if connect_to_peer(peer_id):
+                        thread = peers_dict[peer_id][2]
+                        thread.filelist()
 
 
-            elif command == "#UPLOAD":
-                filename, inputed_peers = parameters.split(" ", 1)
+            elif command == "u":
+
+
+
+
+                if connect_to_peer("p1"):
+                    thread = peers_dict["p1"][2]
+                    thread.upload("f3.txt")
+
+                #                 filename, inputed_peers = parameters.split(" ", 1)
+                # inputed_peers = inputed_peers.split(" ")
+               
+                # for peer_id in inputed_peers:
+                #     if connect_to_peer(peer_id):
+                #         thread = peers_dict[peer_id][2]
+                #         thread.upload(filename)
+
+
                 pass
 
             elif command == "#DOWNLOAD":

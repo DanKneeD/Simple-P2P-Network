@@ -2,7 +2,8 @@ import socket
 import threading
 import os
 
-threads = {}
+threads = []
+server_id = os.path.basename(os.getcwd()) 
 
 
 
@@ -23,35 +24,102 @@ class serverThread(threading.Thread):
         print("initlizing server")
         threading.Thread.__init__(self)
         self.client = client
+        self.connectionSocket , self.addr = client
+        self.isServing = False
 
 
     def run(self):
         print("Starting new server thread, run")
-        connectionSocket, addr = self.client
 
         while True:
             try:
-                print("decoding message from socket")
-                message = connectionSocket.recv(1024).decode()
+                request = self.connectionSocket.recv(1024).decode()
 
 
-                print(f'Received message from {connectionSocket}: {message}')
-
-                if message not in ["#FILELIST", "#UPLOAD", "#DOWNLOAD"]:
-                    print("Invalid command. Supported commands are: #FILELIST, #UPLOAD, #DOWNLOAD")
-                    connectionSocket.send("Invalid command. Supported commands are: #FILELIST, #UPLOAD, #DOWNLOAD".encode())
-
-                elif message == "#FILELIST":
+                if request == "#FILELIST":
                     files = filelist()
-                    connectionSocket.send(", ".join(files).encode()) 
+                    files = ' '.join(files) #making correct format
+                    response = f"Server {server_id} : 200 Files served: {files}"
+                    self.connectionSocket.send(response.encode()) 
+
+                elif request.startswith("#UPLOAD"):
+                    self.upload(request)
 
             except Exception as e:
-                print('An error occurred during communication', str(e))
+                print(f'Server {server_id}: An error occurred during communication', str(e))
+                self.connectionSocket.close()
                 break
-            finally:
-                print("closing connection")
-                connectionSocket.close()  
+        print(f'WHILE TRUE HAS ENDED \n \n')
 
+    def upload(self, request):
+
+        if self.isServing:
+            response = f"250 Currently receiving file filename"
+            self.connectionSocket.send(response.encode())
+            self.isServing = False
+            return
+        
+        self.isServing = True
+
+
+        parts = request.split(' ')
+        filename = parts[1]
+        total_file_size = int(parts[3])
+
+        file_path = os.path.join("./served_files", filename)
+        if os.path.exists(file_path):
+            response = f"250 File {filename} already exists"
+            self.connectionSocket.send(response.encode())
+            self.isServing = False
+            return
+
+
+        # send confirmation
+        response = f"Server({server_id}): 330 Ready to receive file {filename}"
+        self.connectionSocket.send(response.encode())
+        print("sent ack")
+
+        with open(f"./served_files/{filename}", 'w') as f:
+            current_file_size = 0
+            while True:
+
+                data = self.connectionSocket.recv(1024).decode()
+                
+                #no data
+                if not data:
+                    print("Client disconnected")
+                    break
+                
+                # recive success response
+                if data.find(f"File {filename} upload success") != -1:
+
+                    #check if file same size 
+                    if total_file_size != current_file_size:
+                        response = f"Server({server_id}): 250 File {filename} incorrect size"
+                    else:
+                        response = f"Server({server_id}): 200 File {filename} received"
+
+                    self.connectionSocket.send(response.encode())
+                    break
+
+                #split recived metadata
+                split_data = data.split(" ", 4)
+                data = split_data[4] #actual data
+                chunk_i = split_data[3] #chunk number
+
+                current_file_size += len(data)
+
+                #write to file
+                f.write(data)
+
+                #acklnowledge 
+                response = f"Server({server_id}): 200 File {filename} chunk {chunk_i} received"
+                print(response)
+                self.connectionSocket.send(response.encode())
+
+        self.isServing = False
+        print(f"given size {total_file_size} vs final size {current_file_size}")
+        print("closing file")
 
 
 class mainThread():
@@ -62,23 +130,22 @@ class mainThread():
 
         server.bind(('localhost', 5001))
 
-        print("main thread listening")
+ 
         server.listen()
-        while True:
-            try:
+        try:
+            while True:
+                try:
 
-                # connection_socket, address = server.accept()
-                # print(f'Connection from {address} established. Connection ID: {id(connection_socket)} and connection socket: {connection_socket}')
-                # newthread = serverThread(connection_socket, address)
-                # newthread.start()
+                    client = server.accept()
+                    t = serverThread(client)
+                    t.start()
 
-                # threads[id(connection_socket)] = newthread
-                # print(f'Thread {id(connection_socket)} started.')
-                client = server.accept()
-                t = serverThread(client)
-                t.start()
-            except Exception as e:
-                print('An error occurred during connection', str(e))
+                except Exception as e:
+                    print('An error occurred during connection', str(e))
+        except:
+            print("closing server")
+            server.close()
+                
 
 
 print('Server is listening...')
