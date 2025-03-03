@@ -4,6 +4,7 @@ import os
 
 #ip_address, server_port, thread
 peers_dict = {}
+self_peer = os.path.basename(os.getcwd()) 
 
 
 def read_peer_settings():
@@ -151,10 +152,48 @@ class PeerThread(threading.Thread):
 
     def download(self, filename):
         print(f"downloading {filename} from peer {self.peer_id}")
-        pass
+        if os.path.exists(f"./served_files/{filename}"):
+            print(f"File {filename} already exists")
+            return
 
+        #send donwload to all peers
+        peers_ready = []
+        for peer_id in peers_dict:
 
+            #check connection
+            if connect_to_peer(peer_id):
+                self.client_socket.send(f"#DOWNLOAD {filename}".encode())
+                response = self.client_socket.recv(1024).decode()
 
+                #if ready add to list
+                if response.startswith("330"):
+                    peers_ready.append(peer_id)
+
+        #downloading in chunks
+        file_chunks = []
+        chunk_i = 0
+        while True:
+            peer_i = chunk_i % len(peers_ready)
+            peer = peers_ready[peer_i]
+            if connect_to_peer(peer):
+                self.client_socket.send(f"#DOWNLOAD {filename} chunk {chunk_i}".encode())
+                response = self.client_socket.recv(1024).decode()
+                if response.startswith("200"):
+                    file_chunks.append(response.split(" ", 5)[5])  # Extract chunk content
+                    chunk_i += 1
+                else:
+                    break
+            else:
+                break
+
+        #save file chunks
+        if len(file_chunks) == chunk_i:
+            with open(f"./served_files/{filename}", 'wb') as f:
+                for chunk in file_chunks:
+                    f.write(chunk.encode())
+                print(f"File {filename} download success")
+        else:
+            print(f"Failed to download file {filename}")
 
 
 
@@ -169,7 +208,7 @@ def main():
         try:
             command, parameters = user_input.split(" ", 1)
 
-            if command not in ["#FILELIST", "#UPLOAD", "#DOWNLOAD", "u"]:
+            if command not in ["#FILELIST", "#UPLOAD", "#DOWNLOAD"]:
                 print("Invalid command. Supported commands are: #FILELIST, #UPLOAD, #DOWNLOAD")
 
             elif command == "#FILELIST":
@@ -182,30 +221,21 @@ def main():
                         thread.filelist()
 
 
-            elif command == "u":
+            elif command == "#UPLOAD":
 
-
-
-
-                if connect_to_peer("p1"):
-                    thread = peers_dict["p1"][2]
-                    thread.upload("f3.txt")
-
-                #                 filename, inputed_peers = parameters.split(" ", 1)
-                # inputed_peers = inputed_peers.split(" ")
+                filename, inputed_peers = parameters.split(" ", 1)
+                inputed_peers = inputed_peers.split(" ")
                
-                # for peer_id in inputed_peers:
-                #     if connect_to_peer(peer_id):
-                #         thread = peers_dict[peer_id][2]
-                #         thread.upload(filename)
-
-
-                pass
+                for peer_id in inputed_peers:
+                    if connect_to_peer(peer_id):
+                        thread = peers_dict[peer_id][2]
+                        thread.upload(filename)
 
             elif command == "#DOWNLOAD":
                 filename, inputed_peers = parameters.split(" ", 1)
+                inputed_peers = inputed_peers.split(" ")
 
-                pass
+                thread.download(filename, inputed_peers)
 
             else:
                 print("Invalid parameters for command.")

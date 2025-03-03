@@ -155,7 +155,7 @@ class mainThread():
        
         server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-        server.bind(('localhost', 5001))
+        server.bind(('localhost', 5044))
 
  
         server.listen()
